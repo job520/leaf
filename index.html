@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+    <script src="./jquery-1.12.4.min.js"></script>
+    <style>
+        body{
+            margin: 0;
+        }
+        .square{
+            width: 3000px;
+            height: 3000px;
+            background: #ddd;
+            position: relative;
+        }
+        .square > ul{
+            width: 50px;
+            height: 50px;
+            position: absolute;
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .square > ul > li:first-child{
+            width: 30px;
+            height: 30px;
+            border-radius: 30px;
+            background: red;
+            margin: auto;
+        }
+        .square > ul > li:last-child{
+            width: 100%;
+            text-align: center;
+            overflow: hidden;
+            text-overflow:ellipsis;
+            white-space: nowrap;
+        }
+        .login{
+            width: 500px;
+            height: 200px;
+            background: white;
+            position: fixed;
+            z-index: 1;
+            left: calc(50% - 250px);
+            top: calc(50% - 100px);
+            border-radius: 20px;
+        }
+        .login > div{
+            text-align: center;
+            height: 25px;
+            margin-top: 84.5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="square"></div>
+    <div class="login">
+        <div>
+            <label for="name">请输入用户名</label>
+            <input id="name" type="text">
+            <button>确定</button>
+        </div>
+    </div>
+    <script>
+        var data = {}
+        var name = ''
+        var ws
+        // 登录
+        $('.login > div > button').click(function () {
+            var input_name = $('#name').val()
+            if(input_name.trim() == ''){
+                alert('请填写用户名')
+                return
+            }
+            ws = new WebSocket('ws://127.0.0.1:3653')
+            ws.onopen = function() {
+                ws.send(JSON.stringify({Login: {
+                        Event: "do:login",
+                        Data: {
+                            name: input_name
+                        }
+                    }}))
+            }
+            ws.onmessage = function (msg) {
+                // 二进制转字符串
+                var reader = new FileReader();
+                reader.onload = function(event){
+                    var str = reader.result;
+                    var ret_data = JSON.parse(str)
+                    ret_data = ret_data.Return
+                    var e = ret_data.Event
+                    console.log(e)
+                    switch (e) {
+                        case "login:fail":
+                            alert(ret_data.Msg)
+                            ws.close()
+                            break
+                        case "login:success":
+                            $('.login').hide()
+                            data = ret_data.Data
+                            name = input_name
+                            draw()
+                            break
+                        case "new:user":
+                        case "move:to":
+                            var _name = ret_data.Data.name
+                            var _position = ret_data.Data.position
+                            if(_name != name){
+                                data[_name] = _position
+                                draw()
+                            }
+                            break
+                    }
+                };
+                reader.readAsText(msg.data);
+            }
+        })
+
+
+        function draw() {
+            console.log(data)
+            $('.square').html('')
+            for (var k in data){
+                var str = '<ul style="left: ' + data[k].x + 'px;top: ' + data[k].y + 'px;" title="' + k + '"'
+                if (k == name){
+                    str += ' data-is-mine="1">'
+                }else{
+                    str += '>'
+                }
+                str += '<li></li>'
+                str += '<li>' + k + '</li>'
+                str += '</ul>'
+                $('.square').append(str)
+            }
+            $('.square').unbind('click',doclick).bind('click',doclick)
+        }
+
+        function doclick(e) {
+            var x = e.pageX
+            var y = e.pageY
+            if(x < 0){
+                x = 0
+            }
+            if(y < 0){
+                y = 0
+            }
+            if(x > 2950){
+                x = 2950
+            }
+            if(y > 2950){
+                y = 2950
+            }
+            data[name].x = x
+            data[name].y = y
+            $('.square > ul[data-is-mine]').animate({
+                left: x + 'px',
+                top: y + 'px',
+            })
+            if(ws){
+                ws.send(JSON.stringify({Game: {
+                        Event: "move:to",
+                        Data: {
+                            name: name,
+                            position: {
+                                x: x,
+                                y: y,
+                            }
+                        }
+                    }}))
+            }
+        }
+    </script>
+</body>
+</html>
